@@ -1,0 +1,3 @@
+#!/usr/bin/env -S turdokken --install postgresql-client
+
+psql $@

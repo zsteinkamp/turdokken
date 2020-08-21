@@ -24,6 +24,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# COMMAND_FILE may be a relative path. We need to get the absolute path where it resides so that we can mount it into the container.
+COMMAND_FILE_DIR=$(cd "$(dirname "$COMMAND_FILE")"; pwd -P)
+COMMAND_FILE_BASE=$(basename "$COMMAND_FILE")
+
 # location where we will drop the script in the container
 SCRIPT_LOC="/home/app/script"
 
@@ -35,10 +39,11 @@ WORKDIR $(dirname $SCRIPT_LOC)
 ENTRYPOINT ["/bin/bash", "${SCRIPT_LOC}"]
 EOD
 
-COMMAND_FILE_BASE=$(basename "$COMMAND_FILE")
+# generate dockerfile hash for image tag name
+DOCKERFILE_HASH=$(echo -n $DOCKERFILE | openssl dgst -binary -sha256 | openssl base64 | cut -c 1-8 | tr '[:upper:]' '[:lower:]')
 
 # docker image tag
-TAG="turdokken-$(basename ${COMMAND_FILE_BASE//[^A-Za-z0-9-_]/})";
+TAG="turdokken-$(basename ${COMMAND_FILE_BASE//[^A-Za-z0-9-_]/})-${DOCKERFILE_HASH//[^A-Za-z0-9-_]/}";
 
 # build and tag the image
 docker build --quiet --tag $TAG - <<< "$DOCKERFILE" >/dev/null
@@ -48,4 +53,4 @@ docker build --quiet --tag $TAG - <<< "$DOCKERFILE" >/dev/null
 VOLUMES=${VOLUMES/\$HOME/$HOME}
 
 # exec docker to run the container and script, passing any invocation args
-exec docker run ${INTERACTIVE} ${CAPABILITIES} ${VOLUMES} -e HOST_USERNAME=${USER} --mount type=bind,source="${COMMAND_FILE}",target=${SCRIPT_LOC} $TAG $@
+exec docker run ${INTERACTIVE} ${CAPABILITIES} ${VOLUMES} -e HOST_USERNAME=${USER} --mount type=bind,source="${COMMAND_FILE_DIR}/${COMMAND_FILE_BASE}",target=${SCRIPT_LOC} $TAG $@
