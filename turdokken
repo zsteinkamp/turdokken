@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# errors make the script exit
+set -e
+
+# convenience function to populate a variable using heredoc syntax
+define(){ IFS='\n' read -r -d '' ${1} || true; }
+
+# always install bash
+INSTALL="bash"
+INTERACTIVE=""
+CAPABILITIES=""
+VOLUMES=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -i|--install) INSTALL="$INSTALL $2"; shift 2;;
+    -t|--interactive) INTERACTIVE="-it"; shift;;
+    -c|--capability) CAPABILITIES="$CAPABILITIES --cap-add=$2"; shift 2;;
+    -v|--volume) VOLUMES="$VOLUMES --volume=$2"; shift 2;;
+    -*) echo "unknown option: $1" >&2; exit 1;;
+    --) shift;;
+    *) COMMAND_FILE="$1"; shift; break;;
+  esac
+done
+
+# location where we will drop the script in the container
+SCRIPT_LOC="/home/app/script"
+
+# make a Dockerfile
+define DOCKERFILE <<EOD
+FROM alpine:3.12
+RUN apk add --no-cache ${INSTALL}
+WORKDIR $(dirname $SCRIPT_LOC)
+ENTRYPOINT ["/bin/bash", "${SCRIPT_LOC}"]
+EOD
+
+COMMAND_FILE_BASE=$(basename "$COMMAND_FILE")
+
+# docker image tag
+TAG="turdokken-$(basename ${COMMAND_FILE_BASE//[^A-Za-z0-9-_]/})";
+
+# build and tag the image
+docker build --quiet --tag $TAG - <<< "$DOCKERFILE" >/dev/null
+
+# translate $HOME in the volume to the actual $HOME value
+# (docker requires absolute paths)
+VOLUMES=${VOLUMES/\$HOME/$HOME}
+
+# exec docker to run the container and script, passing any invocation args
+exec docker run ${INTERACTIVE} ${CAPABILITIES} ${VOLUMES} -e HOST_USERNAME=${USER} --mount type=bind,source="${COMMAND_FILE}",target=${SCRIPT_LOC} $TAG $@
