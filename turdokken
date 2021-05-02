@@ -1,22 +1,42 @@
 #!/bin/bash
 
+# TURDOKKEN
+# A way to run shell scripts in an Alpine Linux container with installed dependencies
+#
+# Usage
+# Use Turdokken as the shebang line in your script, like:
+#
+#   #!/usr/bin/env -S turdokken --install mysql-client
+#   mysql --version
+#   uname -a
+#
+# When executed, this script will output:
+#
+#   mysql  Ver 15.1 Distrib 10.4.13-MariaDB, for Linux (x86_64) using readline 5.1
+#   Linux 3f73bdfc43c3 4.19.76-linuxkit #1 SMP Tue May 26 11:42:35 UTC 2020 x86_64 Linux
+#
+# The shebang line is important that it starts with #!/usr/bin/env -S
+# turdokken. You can include as many `--install foo` options as is needed.
+
 # errors make the script exit
 set -e
 
-# convenience function to populate a variable using heredoc syntax
+# convenience function
 define(){ IFS='\n' read -r -d '' ${1} || true; }
 
 # always install bash
 INSTALL="bash"
 INTERACTIVE=""
-CAPABILITIES=""
+CAPABILITY=""
 VOLUMES=""
+NETWORK=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -i|--install) INSTALL="$INSTALL $2"; shift 2;;
     -t|--interactive) INTERACTIVE="-it"; shift;;
-    -c|--capability) CAPABILITIES="$CAPABILITIES --cap-add=$2"; shift 2;;
+    -c|--capability) CAPABILITY="--cap-add=$2"; shift 2;;
+    -n|--network) NETWORK="--network=$2"; shift 2;;
     -v|--volume) VOLUMES="$VOLUMES --volume=$2"; shift 2;;
     -*) echo "unknown option: $1" >&2; exit 1;;
     --) shift;;
@@ -24,9 +44,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# COMMAND_FILE may be a relative path. We need to get the absolute path where it resides so that we can mount it into the container.
-COMMAND_FILE_DIR=$(cd "$(dirname "$COMMAND_FILE")"; pwd -P)
-COMMAND_FILE_BASE=$(basename "$COMMAND_FILE")
+if [[ "$COMMAND_FILE" != /* ]]; then
+  # Add the current dir to COMMAND_FILE if we only have the relative path
+  COMMAND_FILE="$PWD/$COMMAND_FILE"
+fi
 
 # location where we will drop the script in the container
 SCRIPT_LOC="/home/app/script"
@@ -39,18 +60,17 @@ WORKDIR $(dirname $SCRIPT_LOC)
 ENTRYPOINT ["/bin/bash", "${SCRIPT_LOC}"]
 EOD
 
-# generate dockerfile hash for image tag name
-DOCKERFILE_HASH=$(echo -n $DOCKERFILE | openssl dgst -binary -sha256 | openssl base64 | cut -c 1-8 | tr '[:upper:]' '[:lower:]')
+COMMAND_FILE_DIR=$(dirname "$COMMAND_FILE")
+COMMAND_FILE_BASE=$(basename "$COMMAND_FILE")
 
 # docker image tag
-TAG="turdokken-$(basename ${COMMAND_FILE_BASE//[^A-Za-z0-9-_]/})-${DOCKERFILE_HASH//[^A-Za-z0-9-_]/}";
+TAG="turdokken-$(basename ${COMMAND_FILE_BASE//[^A-Za-z0-9-_]/})";
 
 # build and tag the image
 docker build --quiet --tag $TAG - <<< "$DOCKERFILE" >/dev/null
 
-# translate $HOME in the volume to the actual $HOME value
-# (docker requires absolute paths)
-VOLUMES=${VOLUMES/\$HOME/$HOME}
+VOLUMES=${VOLUMES//\$HOME/$HOME}
+VOLUMES=${VOLUMES/=\./=$COMMAND_FILE_DIR/.}
 
 # exec docker to run the container and script, passing any invocation args
-exec docker run ${INTERACTIVE} ${CAPABILITIES} ${VOLUMES} -e HOST_USERNAME=${USER} --mount type=bind,source="${COMMAND_FILE_DIR}/${COMMAND_FILE_BASE}",target=${SCRIPT_LOC} $TAG $@
+exec docker run ${INTERACTIVE} ${CAPABILITY} ${NETWORK} ${VOLUMES} -e MAC_USERNAME=${USER} --mount type=bind,source="${COMMAND_FILE}",target=${SCRIPT_LOC} $TAG $@

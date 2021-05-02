@@ -3,7 +3,7 @@ A utility to run any bash script inside of an Alpine Linux Docker container with
 given dependencies installed, volumes mounted, capabilities added. Use it as
 the 'shebang' line of the script.
 
-I wrote turdokken because managing multiple Node, Ruby, Python, Postgres, Mysql, nginx, redis, etc, etc, etc versions and their associated extensions and libraries on my workstation is a headache. Sometimes you just need to run a script in an environment with certain binaries, languages, or libraries installed, but you don't want to have to install and manage those things on your computers. Turdocken uses the elegant power of Docker to build a capable environment to do some work with no hassle and perfect repeatability, then it goes away. Nobody needs to install anything other than Docker. People can just get work done instead of fiddling with installing a bunch of stuff all the time.
+I wrote turdokken because managing multiple Node, Ruby, Python, Postgres, Mysql, nginx, redis, etc, etc, etc versions and their associated extensions and libraries on my workstation is a headache. Sometimes you just need to run a script in an environment with certain binaries, languages, or libraries installed, but you don't want to have to install and manage those things on your computers. Turdokken uses the elegant power of Docker to build a capable environment to do some work with no hassle and perfect repeatability, then it goes away. Nobody needs to install anything other than Docker. People can just get work done instead of fiddling with installing a bunch of stuff all the time.
 
 See the `examples/` folder if you are that type of learner. Otherwise, documentation follows...
 
